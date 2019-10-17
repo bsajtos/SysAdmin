@@ -1,15 +1,40 @@
 
 
-function Get-SID
-{
+function Get-SID {
+<#
+.Synopsis
+    Returns the SID of the server stored in files or registry.
+.Description
+    Returns the SID of the server stored in tsi_system_info.cfg file or registry
+.PARAMETER ComputerName
+	String array type parameter. It accepts array of target servers stored in variables, stored in a e.g: serverlist.txt files, or accepts lists.
+	Default value is the computername in the environment variable.
+.EXAMPLE
+ C:\PS> Get-SID
+ Description
+ -----------
+ bla
+.EXAMPLE
+ C:\PS> 
+ Description
+ -----------
+ bla
+.NOTES
+ Release Notes: 2019.10.17 - Facelift/rework
+ Todo: - pssession
+       - registry query
+#>
+
 	[CMDletbinding()]
 	param (
 		[Parameter(Mandatory = $false, Position = 1)]
 		[ValidateNotNullOrEmpty()]
-		[System.Array]$ComputerName = $env:COMPUTERNAME
+        [Alias('CN')]
+		[string[]]$ComputerName = $env:COMPUTERNAME
 	)
 	
-	
+    
+
 	$Result = @()
 	foreach ($Server in $ComputerName)
 	{
@@ -51,8 +76,6 @@ function Get-SID
 	$Result | % { $Maintanance_Format += $_.Server.tolower() + "," }
 	Write-Host "Serverlist for Maintenance mode:" -ForegroundColor Magenta
 	$Maintanance_Format
-		
-		
 	
 }
 

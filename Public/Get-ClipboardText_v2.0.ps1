@@ -1,13 +1,10 @@
-
-
 function Get-ClipboardText{
     #version 2.0
 
     [CmdletBinding()]
     param (
 	    [switch]$AsServerlist = $false,
-        [switch]$AsString = $false,
-        [switch]$AsArray = $true
+        [switch]$AsString = $false
     )
 
     Add-Type -Assembly PresentationCore
@@ -32,8 +29,7 @@ function Get-ClipboardText{
     }
 
     #default
-    if ($AsArray) {
-        return $clip.Split("`n") | ? {$_ -ne ""}
-    }
+    return $clip.Split("`n") | ? {$_ -ne ""}
+    
 
 }

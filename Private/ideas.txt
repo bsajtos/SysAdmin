@@ -1,0 +1,3 @@
+resize console
+write log
+Test-Monitoring
