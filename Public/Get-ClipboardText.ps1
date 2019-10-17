@@ -1,23 +1,39 @@
 
 
 function Get-ClipboardText{
-#version 2.0
+    #version 2.0
 
-[CmdletBinding()]
-param (
-	[switch]$Serverlist = $false
-)
+    [CmdletBinding()]
+    param (
+	    [switch]$AsServerlist = $false,
+        [switch]$AsString = $false,
+        [switch]$AsArray = $true
+    )
 
-
-$clip = [windows.clipboard]::gettext()
-
-#in case of SM9 format [servername (SID)] return only the servername
-if ($Serverlist) {
     Add-Type -Assembly PresentationCore
-    $regex = "[A-Za-z0-9/\\]*"
-    $clip = $clip.Split("`n") | % {($_ | Select-String -Pattern $regex).matches.Groups[0].value | ? {$_ -ne ""}}  
-}
+    $clip = [windows.clipboard]::gettext()
 
-return $clip
+
+    #returns the clipboard as a long string
+    if ($AsString) {
+        return $clip
+        break
+    }
+
+
+    #in case of SM9 format [servername (SID)] return only the servername in arrays
+    if ($AsServerlist) {
+    
+        $regex = "[A-Za-z0-9/\\]*"
+        $clip = $clip.Split("`n") | % {($_ | Select-String -Pattern $regex).matches.Groups[0].value | ? {$_ -ne ""}} 
+        return $clip
+        break
+     
+    }
+
+    #default
+    if ($AsArray) {
+        return $clip.Split("`n") | ? {$_ -ne ""}
+    }
 
 }
