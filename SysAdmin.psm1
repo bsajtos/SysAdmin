@@ -1,18 +1,18 @@
 
-[version]$ver = '1.0'
 
 #Get public and private functions
-$PublicFunctions = @( Get-ChildItem -Path "$(Split-Path $PSScriptRoot -Parent)\Public\*.ps1" -ErrorAction SilentlyContinue )
-$PrivateFunctions = @( Get-ChildItem -Path "$(Split-Path $PSScriptRoot -Parent)\Private\*.ps1" -ErrorAction SilentlyContinue )
+$PublicFunctions = @( Get-ChildItem -Path "$($PSScriptRoot)\Public\*.ps1" -ErrorAction SilentlyContinue )
+$PrivateFunctions = @( Get-ChildItem -Path "$($PSScriptRoot)\Private\*.ps1" -ErrorAction SilentlyContinue )
+
+$AllFunction = $($PublicFunctions + $PrivateFunctions)
 
 
 #Dot sourcing the functions
-foreach ($scriptfile in @($PublicFunctions + $PrivateFunctions)){
+foreach ($func in $AllFunction){
     try   {
-        . $scriptfile.fullname
-        Write-Verbose "$($scriptfile.Name) imported successfully."
+        . $func.fullname
     }
-    catch {Write-Error "Failed to import function $($scriptfile.fullname)"}
+    catch {Write-Error "Failed to import function $($func.fullname)"}
 
 }
 
@@ -21,6 +21,9 @@ foreach ($scriptfile in @($PublicFunctions + $PrivateFunctions)){
 
 
 
-#Making the public functions available for the users
-Export-ModuleMember -Function $PublicFunctions.basename
+
+#Exporting the public functions
+$PublicFunctions | % {Export-ModuleMember -Function $_.basename}
+
+
 

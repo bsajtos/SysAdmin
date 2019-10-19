@@ -1,3 +1,4 @@
 resize console
 write log
 Test-Monitoring
+resolve distinguishedname
