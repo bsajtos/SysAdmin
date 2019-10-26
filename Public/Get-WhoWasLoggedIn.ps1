@@ -62,6 +62,7 @@
                     2019.10.26 (v1.2) - ExcludeNoise switch
                                       - User Initiated Logoffs events (4647) included
                                       - CBH update
+                                      - Combine-Objects used
                                       
     Todo: - to use start and end but not minutes
           - proper sorting/grouping
@@ -303,7 +304,10 @@ PROCESS {
 
 
     #combine logon and logoff events
-    $Result = $ResultLogons + $resultLogoffs + $resultUILs
+    #$Result =  $ResultLogons + $resultLogoffs + $resultUILs
+    $Result = Combine-Objects -object1 $ResultLogons -Object2 $ResultLogoffs
+    $Result = Combine-Objects -Object1 $Result -Object2 $ResultUILs
+
 
     if ($ExcludeNoise) {
         $Result = $Result | Where-Object {$_.TargetUserName -notlike "$($env:computername)*"}
