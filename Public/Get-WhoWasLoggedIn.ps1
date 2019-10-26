@@ -1,10 +1,10 @@
 ﻿function Get-WhoWasLoggedIn {
 <#
 .Synopsis
-    Returns who was logged in at a specific time interval on the server.
+    Returns who was logged in within a specific time interval on the server(s).
 
 .Description
-    Collects Logon and Logoff events from Security logs, then processes them by grouping the events based on their LogonID
+    Collects Logon and Logoff events from Security log, then processes them by grouping the events based on their LogonID
     in a cronological order. It makes possible to easily follow session activity within a give time interval.
     Policies -> Windows Settings -> Security Settings -> Local Policies -> Audit Policy -> Logon/Logoff events must be enabled.
 
@@ -18,8 +18,8 @@
 
 .PARAMETER StartTime
     DateTime object. Defines the timestamp when events will be gathered from. Must not point to a future date. Can be
-    used together with Minutes paramater, but not with EndTime paramater.
-    Default value: n/a, is calculated within script based on parameters
+    used in combination with EndTime and Minutes paramater tospecify an exact time interval.
+    Default value: n/a, is calculated within script based on parameters.
 
 .PARAMETER EndTime
     DateTime object. Defines the timestamp till events will be gathered. Can be used together with Minutes paramater,
@@ -30,6 +30,11 @@
     Integer object. Defines how many minutes should be included from either StartTime (forwards) or EndTime (backwards)
     paramaters. Must be in rage 1 minutes - 1440 mins (1 day).
     Default value: 120 minutes (2 hours)
+
+.PARAMETER ExcludeNoise
+    Switch. When specifying this switch paramater, certain events will be excluded which are usually noise: services which run as system,
+    network logins, etc.
+    Default value: False
     
 .EXAMPLE
     C:\PS> Get-WhoWasLoggedIn
@@ -54,51 +59,55 @@
                     2019.10.25 (v1.1) - facelift
                                       - paramatersets, param rework, renames
                                       - CBH
+                    2019.10.26 (v1.2) - ExcludeNoise switch
+                                      - User Initiated Logoffs events (4647) included
+                                      - CBH update
                                       
     Todo: - to use start and end but not minutes
-          - use generic list XML [Collections.Generic.List[XML]]
-          - validate if logon/logoff is enabled
-          - include 'logon' and 'logoff'
           - proper sorting/grouping
           - ps1xml to format output
+          - combine different pscustomobject into 1... private function needed for that
 
 #>
 
 
-    [Cmdletbinding(DefaultParameterSetName = 'Min')]
-    Param (
-        [Parameter(Position = 0)]
-        [Alias('CN')]
-        [String[]]
-        $ComputerName = $env:computername,
+[Cmdletbinding()]
+Param (
+    [Parameter(Position = 0)]
+    [Alias('CN')]
+    [String[]]
+    $ComputerName = $env:computername,
         
-        [Parameter(ParameterSetName='Start')]
-        [Parameter(ParameterSetName='End')]
-        [Parameter(ParameterSetName='Min')]
-        [Validaterange(1,1440)]
-        [Int]
-        $Minutes = 120,
+    [Parameter()]
+    [Validaterange(1,1440)]
+    [Int]
+    $Minutes = 120,
         
-        [Parameter(ParameterSetName='Start')]
-        [ValidateScript({$_ -lt (Get-Date)})]
-        [DateTime]
-        $StartTime,
+    [Parameter()]
+    [ValidateScript({$_ -lt ([datetime]::Now)})]
+    [DateTime]
+    $StartTime,
         
-        [Parameter(ParameterSetName='End')]
-        [DateTime]
-        $EndTime, 
+    [Parameter()]
+    [DateTime]
+    $EndTime,
 
-        [Parameter()]
-        [ValidateNotNull()]
-        [System.Management.Automation.PSCredential]
-        [System.Management.Automation.Credential()]
-        $Credential = [System.Management.Automation.PSCredential]::Empty
-    )
+    [Parameter()]
+    [Switch]
+    $ExcludeNoise,
+
+    [Parameter()]
+    [ValidateNotNull()]
+    [System.Management.Automation.PSCredential]
+    [System.Management.Automation.Credential()]
+    $Credential = [System.Management.Automation.PSCredential]::Empty
+)
+
 
 BEGIN{
 
     #Determining Filter Criteria for event lookup times
-    $now = Get-Date
+    $now = [datetime]::Now
     
     if ($StartTime -and $EndTime) {
         $From = $StartTime
@@ -117,7 +126,7 @@ BEGIN{
         $To = $now
     }
 
-    #do not search in the future, search maximum till present
+    #do not search in the future, search till present latest
     if ($To -gt $now) {$To = $now}
     
     
@@ -131,15 +140,16 @@ BEGIN{
 PROCESS {
 
     $ResultLogons = New-Object System.Collections.ArrayList($null)
-    $resultLogoffs = New-Object System.Collections.ArrayList($null)
-
+    $ResultLogoffs = New-Object System.Collections.ArrayList($null)
+    $ResultUILs = New-Object System.Collections.ArrayList($null)
+    
     foreach ($cn in $ComputerName) {
         #collecting LOGON events
         try {
             $Events = Get-WinEvent -computername $cn -ErrorAction Stop -FilterHashtable @{
-                LogName = 'Security';`
-                ID = 4624,4634; `
-                StartTime = $From;`
+                LogName = 'Security';
+                ID = 4624,4634,4647;
+                StartTime = $From;
                 EndTime = $To
                 }
         }
@@ -152,9 +162,10 @@ PROCESS {
         #seperating events due to different xml structures
         $Logons =  $Events | Where-Object {$_.ID -eq 4624}
         $Logoffs = $Events | Where-Object {$_.ID -eq 4634}
+        $UserInitiatedLogoffs = $Events | Where-Object {$_.ID -eq 4647}
            
       
-        
+        #LOGON - 4624
         foreach ($tempLogon in $Logons) {
             
             $obj = $tempLogon | select MachineName, TimeCreated,ID, ProcessId, ThreadId 
@@ -166,6 +177,9 @@ PROCESS {
                     -Value $($eventxml[$i].'#text')  
             }
             
+            Add-Member -InputObject $obj -MemberType NoteProperty -Force -Name Message -Value 'An account was logged on'
+
+
             #Modifying some values to be more userfriendly
             #http://techgenix.com/logon-types/
             switch ($obj.LogonType){
@@ -228,7 +242,7 @@ PROCESS {
         }
         
         
-
+        #LOGOFF - 4634
         foreach ($tempLogoff in $Logoffs) {
             
             $obj = $tempLogoff | select MachineName, TimeCreated, ID, ProcessId, ThreadId 
@@ -239,6 +253,9 @@ PROCESS {
                     -Name  $($eventxml[$i].name)`
                     -Value $($eventxml[$i].'#text')  
             }
+            
+            Add-Member -InputObject $obj -MemberType NoteProperty -Force -Name Message -Value 'An account was logged off'
+
             
             #Modifying some values to be more userfriendly
             #http://techgenix.com/logon-types/
@@ -264,19 +281,53 @@ PROCESS {
            
         }
 
+        #USER INITIATED LOGOFF - 4647
+        foreach ($tempUIL in $UserInitiatedLogoffs) {
+            
+            $obj = $tempUIL | select MachineName, TimeCreated, ID, ProcessId, ThreadId 
+            $eventXML = ([xml]$tempUIL.toxml()).Event.EventData.Data
+            
+            for ($i=0; $i -lt $eventxml.count; $i++) {  
+                Add-Member -InputObject $obj -MemberType NoteProperty -Force `
+                    -Name  $($eventxml[$i].name)`
+                    -Value $($eventxml[$i].'#text')  
+            }
+            
+            Add-Member -InputObject $obj -MemberType NoteProperty -Force -Name Message -Value 'User initiated logoff'
+ 
+            $resultUILs.add(($obj)) | Out-Null
+            
+        }
         
     }
-    
+
 
     #combine logon and logoff events
-    $Result = $ResultLogons + $resultLogoffs 
+    $Result = $ResultLogons + $resultLogoffs + $resultUILs
+
+    if ($ExcludeNoise) {
+        $Result = $Result | Where-Object {$_.TargetUserName -notlike "$($env:computername)*"}
+
+        #Services which run as SYSTEM
+        $Result = $Result | Where-Object {$_.TargetUserName -notlike 'SYSTEM' -and $_.Logontype -notlike "5*"}
+        
+        #Network logons, usually: IIS, printers, shared folders
+        $Result = $Result | Where-Object {$_.Logontype -notlike "3*"}
+        
+        #https://docs.microsoft.com/en-us/windows/win32/dwm/dwm-overview
+        $Result = $Result | Where-Object {$_.TargetDomainName -ne 'Window Manager'}
+
+    }
 
 }
+
 
 END {
     
     #return output
-    $Result | sort TargetLogonId
+    $Result | sort TimeCreated | select MachineName, TimeCreated, Message, TargetUserName, LogonType, targetlogonid
+
+    #cleanup
     [System.GC]::Collect()
 }
 
