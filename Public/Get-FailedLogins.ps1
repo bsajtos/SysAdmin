@@ -94,10 +94,7 @@ function Get-FailedLogins {
         v1.2 (2019.10.26) - include in module
                           - facelift, little rework
     Todo: -CBH update
-
-
-
-
+          -getwinevent maxevents
 #>
 
 

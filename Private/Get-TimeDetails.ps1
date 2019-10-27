@@ -1,7 +1,7 @@
 ﻿function Get-TimeDetails {
     
     $format = 'yyyy.MM.dd HH:mm:ss'
-    $now = Get-Date  
+    $now = [datetime]::Now  
     $tz = [System.TimeZoneInfo]::Local
 
     #Extending the DateTime object with further Properties
